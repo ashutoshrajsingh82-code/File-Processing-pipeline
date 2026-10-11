@@ -1,0 +1,100 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: filepipeline
+      POSTGRES_USER: pipeline
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-local-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pipeline -d filepipeline"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: chrislusf/seaweedfs:latest
+    command: mini -dir=/data
+    restart: unless-stopped
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:-minioadmin-change-this}
+      S3_BUCKET: uploads,processed
+    ports:
+      - "9000:8333"
+      - "9001:8888"
+    volumes:
+      - minio_data:/data
+
+  api:
+    build: .
+    restart: unless-stopped
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment: &app-env
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql+psycopg2://pipeline:${POSTGRES_PASSWORD:-change-this-local-password}@postgres:5432/filepipeline
+      MINIO_ENDPOINT: minio:8333
+      MINIO_PUBLIC_ENDPOINT: localhost:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin-change-this}
+      MINIO_SECURE: "false"
+      UPLOADS_BUCKET: uploads
+      OUTPUTS_BUCKET: processed
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command:
+      - celery
+      - -A
+      - celery_worker.celery_app
+      - worker
+      - --loglevel=INFO
+      - --concurrency=2
+      - --pool=solo
+    environment: *app-env
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  minio_data:

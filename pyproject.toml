@@ -1,0 +1,27 @@
+[project]
+name = "image-processor"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.38.40",
+    "celery[redis]==5.3.*",
+    "fastapi[standard]>=0.115.13",
+    "gunicorn>=23.0.0",
+    "kombu<5.4.0",
+    "passlib[bcrypt,crypt]>=1.7.4",
+    "pillow>=11.2.1",
+    "psycopg2-binary>=2.9.10",
+    "pymupdf>=1.26.1",
+    "pytesseract>=0.3.13",
+    "python-jose[cryptography]>=3.5.0",
+    "python-multipart>=0.0.20",
+    "redis<6.0.0",
+    "requests>=2.32.4",
+    "sqlalchemy>=2.0.41",
+    "uvicorn[standard]>=0.34.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0.0", "httpx>=0.27.0"]
